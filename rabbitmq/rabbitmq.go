@@ -35,7 +35,7 @@ func (c *Connection) Channel() (*Channel, error) {
 				channel.Close() // close again, ensure closed flag set when connection closed
 				break
 			}
-			debug("channel closed, reason: %v", reason)
+			debugf("channel closed, reason: %v", reason)
 
 			// reconnect if not closed by developer
 			for {
@@ -97,6 +97,61 @@ func Dial(url string) (*Connection, error) {
 	}()
 
 	return connection, nil
+}
+
+// DialCluster with reconnect
+func DialCluster(urls []string) (*Connection, error) {
+	nodeSequence := 0
+	conn, err := amqp.Dial(urls[nodeSequence])
+
+	if err != nil {
+		return nil, err
+	}
+	connection := &Connection{
+		Connection: conn,
+	}
+
+	go func(urls []string, seq *int) {
+		for {
+			reason, ok := <-connection.Connection.NotifyClose(make(chan *amqp.Error))
+			if !ok {
+				debug("connection closed")
+				break
+			}
+			debugf("connection closed, reason: %v", reason)
+
+			// reconnect with another node of cluster
+			for {
+				time.Sleep(delay * time.Second)
+
+				newSeq := next(urls, *seq)
+				*seq = newSeq
+
+				conn, err := amqp.Dial(urls[newSeq])
+				if err == nil {
+					connection.Connection = conn
+					debugf("reconnect success")
+					break
+				}
+
+				debugf("reconnect failed, err: %v", err)
+			}
+		}
+	}(urls, &nodeSequence)
+
+	return connection, nil
+}
+
+// Next element index of slice
+func next(s []string, lastSeq int) int {
+	length := len(s)
+	if length == 0 || lastSeq == length-1 {
+		return 0
+	} else if lastSeq < length-1 {
+		return lastSeq + 1
+	} else {
+		return -1
+	}
 }
 
 // Channel amqp.Channel wapper

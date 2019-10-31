@@ -14,3 +14,9 @@ To simply developers, here is auto reconnect wrap with detail comments.
 ### Auto reconnect
 > go run example/reconnect/demo.go
 
+### RabbitMQ Cluster with Reconnect
+```go
+import "github.com/isayme/go-amqp-reconnect/rabbitmq"
+
+rabbitmq.DialCluster([]string{"amqp://usr:pwd@127.0.0.1:5672/vhost","amqp://usr:pwd@127.0.0.1:5673/vhost","amqp://usr:pwd@127.0.0.1:5674/vhost"})
+```
