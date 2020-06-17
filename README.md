@@ -20,3 +20,22 @@ import "github.com/xssnick/go-amqp-reconnect/rabbitmq"
 
 rabbitmq.DialCluster([]string{"amqp://usr:pwd@127.0.0.1:5672/vhost","amqp://usr:pwd@127.0.0.1:5673/vhost","amqp://usr:pwd@127.0.0.1:5674/vhost"})
 ```
+
+### Hooks
+```go
+func (c *Connection) OnConnectionFail(f func(e *amqp.Error)) {
+	c.onConnection = f
+}
+
+func (c *Connection) OnChannelFail(f func(e *amqp.Error)) {
+	c.onChannel = f
+}
+
+func (c *Connection) OnReconnect(f func()) {
+	c.onReConnection = f
+}
+
+func (c *Connection) OnChannelRestore(f func()) {
+	c.onReChannel = f
+}
+```
