@@ -6,7 +6,7 @@ import (
 
 	"github.com/streadway/amqp"
 
-	"github.com/sirius1024/go-amqp-reconnect/rabbitmq"
+	"github.com/xssnick/go-amqp-reconnect/rabbitmq"
 )
 
 func main() {

@@ -1,9 +1,8 @@
 package rabbitmq
 
 import (
-	"time"
-
 	"sync/atomic"
+	"time"
 
 	"github.com/streadway/amqp"
 )
@@ -13,6 +12,27 @@ const delay = 3 // reconnect after delay seconds
 // Connection amqp.Connection wrapper
 type Connection struct {
 	*amqp.Connection
+	onConnection func(e *amqp.Error)
+	onChannel func(e *amqp.Error)
+
+	onReConnection func()
+	onReChannel func()
+}
+
+func (c *Connection) OnConnectionFail(f func(e *amqp.Error)) {
+	c.onConnection = f
+}
+
+func (c *Connection) OnChannelFail(f func(e *amqp.Error)) {
+	c.onChannel = f
+}
+
+func (c *Connection) OnReconnect(f func()) {
+	c.onReConnection = f
+}
+
+func (c *Connection) OnChannelRestore(f func()) {
+	c.onReChannel = f
 }
 
 // Channel wrap amqp.Connection.Channel, get a auto reconnect channel
@@ -37,6 +57,10 @@ func (c *Connection) Channel() (*Channel, error) {
 			}
 			debugf("channel closed, reason: %v", reason)
 
+			if c.onChannel != nil {
+				c.onChannel(reason)
+			}
+
 			// reconnect if not closed by developer
 			for {
 				// wait 1s for connection reconnect
@@ -46,6 +70,11 @@ func (c *Connection) Channel() (*Channel, error) {
 				if err == nil {
 					debug("channel recreate success")
 					channel.Channel = ch
+
+					if c.onReChannel != nil {
+						c.onReChannel()
+					}
+
 					break
 				}
 
@@ -79,6 +108,10 @@ func Dial(url string) (*Connection, error) {
 			}
 			debugf("connection closed, reason: %v", reason)
 
+			if connection.onConnection != nil {
+				connection.onConnection(reason)
+			}
+
 			// reconnect if not closed by developer
 			for {
 				// wait 1s for reconnect
@@ -88,6 +121,11 @@ func Dial(url string) (*Connection, error) {
 				if err == nil {
 					connection.Connection = conn
 					debugf("reconnect success")
+
+					if connection.onReConnection != nil {
+						connection.onReConnection()
+					}
+
 					break
 				}
 
@@ -120,6 +158,10 @@ func DialCluster(urls []string) (*Connection, error) {
 			}
 			debugf("connection closed, reason: %v", reason)
 
+			if connection.onConnection != nil {
+				connection.onConnection(reason)
+			}
+
 			// reconnect with another node of cluster
 			for {
 				time.Sleep(delay * time.Second)
@@ -131,6 +173,11 @@ func DialCluster(urls []string) (*Connection, error) {
 				if err == nil {
 					connection.Connection = conn
 					debugf("reconnect success")
+
+					if connection.onReConnection != nil {
+						connection.onReConnection()
+					}
+
 					break
 				}
 
