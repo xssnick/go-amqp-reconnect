@@ -86,7 +86,7 @@ func (c *Connection) Channel() (*Channel, error) {
 					debug("channel recreate success")
 
 					ptr := unsafe.Pointer(channel.Channel)
-					atomic.SwapPointer(&ptr, ch)
+					atomic.SwapPointer(&ptr, unsafe.Pointer(ch))
 
 					if c.onReChannel != nil {
 						c.onReChannel()
@@ -142,7 +142,7 @@ func Dial(url string) (*Connection, error) {
 				conn, err := amqp.Dial(url)
 				if err == nil {
 					ptr := unsafe.Pointer(connection.Connection)
-					atomic.SwapPointer(&ptr, conn)
+					atomic.SwapPointer(&ptr, unsafe.Pointer(conn))
 
 					debugf("reconnect success")
 
@@ -200,7 +200,7 @@ func DialCluster(urls []string) (*Connection, error) {
 				conn, err := amqp.Dial(urls[newSeq])
 				if err == nil {
 					ptr := unsafe.Pointer(connection.Connection)
-					atomic.SwapPointer(&ptr, conn)
+					atomic.SwapPointer(&ptr, unsafe.Pointer(conn))
 
 					debugf("reconnect success")
 
