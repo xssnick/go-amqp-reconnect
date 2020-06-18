@@ -1,8 +1,10 @@
 package rabbitmq
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/streadway/amqp"
 )
@@ -17,22 +19,31 @@ type Connection struct {
 
 	onReConnection func()
 	onReChannel func()
+	mx sync.RWMutex
 }
 
 func (c *Connection) OnConnectionFail(f func(e *amqp.Error)) {
+	c.mx.Lock()
 	c.onConnection = f
+	c.mx.Unlock()
 }
 
 func (c *Connection) OnChannelFail(f func(e *amqp.Error)) {
+	c.mx.Lock()
 	c.onChannel = f
+	c.mx.Unlock()
 }
 
 func (c *Connection) OnReconnect(f func()) {
+	c.mx.Lock()
 	c.onReConnection = f
+	c.mx.Unlock()
 }
 
 func (c *Connection) OnChannelRestore(f func()) {
+	c.mx.Lock()
 	c.onReChannel = f
+	c.mx.Unlock()
 }
 
 // Channel wrap amqp.Connection.Channel, get a auto reconnect channel
@@ -57,8 +68,12 @@ func (c *Connection) Channel() (*Channel, error) {
 			}
 			debugf("channel closed, reason: %v", reason)
 
-			if c.onChannel != nil {
-				c.onChannel(reason)
+			c.mx.RLock()
+			f := c.onChannel
+			c.mx.RUnlock()
+
+			if f != nil {
+				f(reason)
 			}
 
 			// reconnect if not closed by developer
@@ -69,7 +84,9 @@ func (c *Connection) Channel() (*Channel, error) {
 				ch, err := c.Connection.Channel()
 				if err == nil {
 					debug("channel recreate success")
-					channel.Channel = ch
+
+					ptr := unsafe.Pointer(channel.Channel)
+					atomic.SwapPointer(&ptr, ch)
 
 					if c.onReChannel != nil {
 						c.onReChannel()
@@ -108,8 +125,13 @@ func Dial(url string) (*Connection, error) {
 			}
 			debugf("connection closed, reason: %v", reason)
 
-			if connection.onConnection != nil {
-				connection.onConnection(reason)
+
+			connection.mx.RLock()
+			f := connection.onConnection
+			connection.mx.RUnlock()
+
+			if f != nil {
+				f(reason)
 			}
 
 			// reconnect if not closed by developer
@@ -119,7 +141,9 @@ func Dial(url string) (*Connection, error) {
 
 				conn, err := amqp.Dial(url)
 				if err == nil {
-					connection.Connection = conn
+					ptr := unsafe.Pointer(connection.Connection)
+					atomic.SwapPointer(&ptr, conn)
+
 					debugf("reconnect success")
 
 					if connection.onReConnection != nil {
@@ -158,8 +182,12 @@ func DialCluster(urls []string) (*Connection, error) {
 			}
 			debugf("connection closed, reason: %v", reason)
 
-			if connection.onConnection != nil {
-				connection.onConnection(reason)
+			connection.mx.RLock()
+			f := connection.onConnection
+			connection.mx.RUnlock()
+
+			if f != nil {
+				f(reason)
 			}
 
 			// reconnect with another node of cluster
@@ -171,7 +199,9 @@ func DialCluster(urls []string) (*Connection, error) {
 
 				conn, err := amqp.Dial(urls[newSeq])
 				if err == nil {
-					connection.Connection = conn
+					ptr := unsafe.Pointer(connection.Connection)
+					atomic.SwapPointer(&ptr, conn)
+
 					debugf("reconnect success")
 
 					if connection.onReConnection != nil {
@@ -209,7 +239,7 @@ type Channel struct {
 
 // IsClosed indicate closed by developer
 func (ch *Channel) IsClosed() bool {
-	return (atomic.LoadInt32(&ch.closed) == 1)
+	return atomic.LoadInt32(&ch.closed) == 1
 }
 
 // Close ensure closed flag set
